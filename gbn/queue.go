@@ -1,6 +1,7 @@
 package gbn
 
 import (
+	"math/rand"
 	"sync"
 	"time"
 )
@@ -41,6 +42,8 @@ type queue struct {
 
 	lastResend       time.Time
 	handshakeTimeout time.Duration
+
+	queueID uint8
 }
 
 // newQueue creates a new queue.
@@ -50,6 +53,17 @@ func newQueue(s uint8, handshakeTimeout time.Duration) *queue {
 		s:                s,
 		handshakeTimeout: handshakeTimeout,
 	}
+}
+
+func (q *queue) getID() uint8 {
+	if q.queueID == 0 {
+		// Initialize the random number generator with a unique seed
+		rand.Seed(time.Now().UnixNano())
+
+		// Generate a random uint32
+		q.queueID = uint8(rand.Uint32())
+	}
+	return q.queueID
 }
 
 // size is used to calculate the current sender queueSize.
@@ -113,14 +127,14 @@ func (q *queue) resend(cb func(packet *PacketData) error) error {
 		}
 		base = (base + 1) % q.s
 
-		log.Tracef("Resent %d", packet.Seq)
+		log.Tracef("%d: Resent %d: %d", q.getID(), packet.Seq, packet.GetID())
 	}
 
 	return nil
 }
 
 // processACK processes an incoming ACK of a given sequence number.
-func (q *queue) processACK(seq uint8) bool {
+func (q *queue) processACK(seq uint8, pId uint8) bool {
 
 	// If our queue is empty, an ACK should not have any effect.
 	if q.size() == 0 {
@@ -137,7 +151,7 @@ func (q *queue) processACK(seq uint8) bool {
 		// equal to the one we were expecting. So we increase our base
 		// accordingly and send a signal to indicate that the queue size
 		// has decreased.
-		log.Tracef("Received correct ack %d", seq)
+		log.Tracef("%d: Received correct ack %d: %d", q.getID(), seq, pId)
 
 		q.sequenceBase = (q.sequenceBase + 1) % q.s
 
@@ -178,7 +192,7 @@ func (q *queue) processNACK(seq uint8) (bool, bool) {
 	q.topMtx.RLock()
 	defer q.topMtx.RUnlock()
 
-	log.Tracef("Received NACK %d", seq)
+	log.Tracef("%d: Received NACK %d", q.getID(), seq)
 
 	// If the NACK is the same as sequenceTop, it probably means that queue
 	// was sent successfully, but we just missed the necessary ACKs. So we

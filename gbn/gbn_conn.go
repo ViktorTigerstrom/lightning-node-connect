@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/rand"
 	"sync"
 	"time"
 )
@@ -109,6 +110,8 @@ type GoBackNConn struct {
 	quit      chan struct{}
 	closeOnce sync.Once
 	wg        sync.WaitGroup
+
+	gbnID uint8
 }
 
 // newGoBackNConn creates a GoBackNConn instance with all the members which
@@ -138,6 +141,17 @@ func newGoBackNConn(ctx context.Context, sendFunc sendBytesFunc,
 		cancel:            cancel,
 		quit:              make(chan struct{}),
 	}
+}
+
+func (g *GoBackNConn) getID() uint8 {
+	if g.gbnID == 0 {
+		// Initialize the random number generator with a unique seed
+		rand.Seed(time.Now().UnixNano())
+
+		// Generate a random uint32
+		g.gbnID = uint8(rand.Uint32())
+	}
+	return g.gbnID
 }
 
 // setN sets the current N to use. This _must_ be set before the handshake is
@@ -437,7 +451,7 @@ func (g *GoBackNConn) sendPacketsForever() error {
 		// send.
 		g.sendQueue.addPacket(packet)
 
-		log.Tracef("Sending data %d", packet.Seq)
+		log.Tracef("%d: Sending data %d: %d", g.getID(), packet.Seq, packet.GetID())
 		if err := g.sendPacket(g.ctx, packet); err != nil {
 			return err
 		}
@@ -516,10 +530,11 @@ func (g *GoBackNConn) receivePacketsForever() error { // nolint:gocyclo
 				// an ACK message with that sequence number
 				// and we bump the sequence number that we
 				// expect of the next data packet.
-				log.Tracef("Got expected data %d", m.Seq)
+				log.Tracef("%d: Got expected data %d: %d", g.getID(), m.Seq, m.GetID())
 
 				ack := &PacketACK{
 					Seq: m.Seq,
+					PID: m.GetID(),
 				}
 
 				if err = g.sendPacket(g.ctx, ack); err != nil {
@@ -551,7 +566,7 @@ func (g *GoBackNConn) receivePacketsForever() error { // nolint:gocyclo
 				// it could be that we missed a previous packet.
 				// In either case, we send a NACK with the
 				// sequence number that we were expecting.
-				log.Tracef("Got unexpected data %d", m.Seq)
+				log.Tracef("%d: Got unexpected data %d: %d", g.getID(), m.Seq, m.GetID())
 
 				// If we recently sent a NACK for the same
 				// sequence number then back off.
@@ -561,7 +576,7 @@ func (g *GoBackNConn) receivePacketsForever() error { // nolint:gocyclo
 					continue
 				}
 
-				log.Tracef("Sending NACK %d", g.recvSeq)
+				log.Tracef("%d: Sending NACK %d", g.getID(), g.recvSeq)
 
 				// Send a NACK with the expected sequence
 				// number.
@@ -578,7 +593,7 @@ func (g *GoBackNConn) receivePacketsForever() error { // nolint:gocyclo
 			}
 
 		case *PacketACK:
-			gotValidACK := g.sendQueue.processACK(m.Seq)
+			gotValidACK := g.sendQueue.processACK(m.Seq, m.PID)
 			if gotValidACK {
 				g.resendTicker.Reset(g.resendTimeout)
 

@@ -3,6 +3,8 @@ package gbn
 import (
 	"bytes"
 	"io"
+	"math/rand"
+	"time"
 )
 
 const (
@@ -26,6 +28,7 @@ type PacketData struct {
 	FinalChunk bool
 	IsPing     bool
 	Payload    []byte
+	PID        uint8
 }
 
 var _ Message = (*PacketData)(nil)
@@ -60,6 +63,10 @@ func (m *PacketData) Serialize() ([]byte, error) {
 		}
 	}
 
+	if err := buf.WriteByte(m.GetID()); err != nil {
+		return nil, err
+	}
+
 	if _, err := buf.Write(m.Payload); err != nil {
 		return nil, err
 	}
@@ -67,8 +74,20 @@ func (m *PacketData) Serialize() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+func (m *PacketData) GetID() uint8 {
+	if m.PID == 0 {
+		// Initialize the random number generator with a unique seed
+		rand.Seed(time.Now().UnixNano())
+
+		// Generate a random uint32
+		m.PID = uint8(rand.Uint32())
+	}
+	return m.PID
+}
+
 type PacketACK struct {
 	Seq uint8
+	PID uint8
 }
 
 var _ Message = (*PacketACK)(nil)
@@ -80,6 +99,10 @@ func (m *PacketACK) Serialize() ([]byte, error) {
 	}
 
 	if err := buf.WriteByte(m.Seq); err != nil {
+		return nil, err
+	}
+
+	if err := buf.WriteByte(m.PID); err != nil {
 		return nil, err
 	}
 
@@ -166,7 +189,8 @@ func Deserialize(b []byte) (Message, error) {
 			Seq:        b[1],
 			FinalChunk: b[2] == TRUE,
 			IsPing:     b[3] == TRUE,
-			Payload:    b[4:],
+			PID:        b[4],
+			Payload:    b[5:],
 		}, nil
 	case ACK:
 		if len(b) < 2 {
@@ -174,6 +198,7 @@ func Deserialize(b []byte) (Message, error) {
 		}
 		return &PacketACK{
 			Seq: b[1],
+			PID: b[2],
 		}, nil
 	case NACK:
 		if len(b) < 2 {
