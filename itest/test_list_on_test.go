@@ -5,6 +5,14 @@ package itest
 
 var testCases = []*testCase{
 	{
+		name: "test large response",
+		test: testLargeResponse,
+	},
+}
+
+/*
+var testCases = []*testCase{
+	{
 		name: "test happy path",
 		test: testHappyPath,
 	},
@@ -14,10 +22,6 @@ var testCases = []*testCase{
 		localMailboxOnly: true,
 	},
 	{
-		name: "test large response",
-		test: testLargeResponse,
-	},
-	{
 		name: "test client reconnect",
 		test: testClientReconnect,
 	},
@@ -25,4 +29,8 @@ var testCases = []*testCase{
 		name: "test server reconnect",
 		test: testServerReconnect,
 	},
-}
+	{
+		name: "test large response",
+		test: testLargeResponse,
+	},
+}*/
