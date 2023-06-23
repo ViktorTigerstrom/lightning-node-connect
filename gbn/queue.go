@@ -121,6 +121,7 @@ func (q *queue) resend(cb func(packet *PacketData) error) error {
 
 	for base != top {
 		packet := q.content[base]
+		packet.IsResent = true
 
 		if err := cb(packet); err != nil {
 			return err

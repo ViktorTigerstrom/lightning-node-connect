@@ -29,6 +29,7 @@ type PacketData struct {
 	IsPing     bool
 	Payload    []byte
 	PID        uint8
+	IsResent   bool
 }
 
 var _ Message = (*PacketData)(nil)
@@ -54,6 +55,16 @@ func (m *PacketData) Serialize() ([]byte, error) {
 	}
 
 	if m.IsPing {
+		if err := buf.WriteByte(TRUE); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := buf.WriteByte(FALSE); err != nil {
+			return nil, err
+		}
+	}
+
+	if m.IsResent {
 		if err := buf.WriteByte(TRUE); err != nil {
 			return nil, err
 		}
@@ -189,8 +200,9 @@ func Deserialize(b []byte) (Message, error) {
 			Seq:        b[1],
 			FinalChunk: b[2] == TRUE,
 			IsPing:     b[3] == TRUE,
-			PID:        b[4],
-			Payload:    b[5:],
+			IsResent:   b[4] == TRUE,
+			PID:        b[5],
+			Payload:    b[6:],
 		}, nil
 	case ACK:
 		if len(b) < 2 {

@@ -112,6 +112,8 @@ type GoBackNConn struct {
 	wg        sync.WaitGroup
 
 	gbnID uint8
+
+	awaitingResend bool
 }
 
 // newGoBackNConn creates a GoBackNConn instance with all the members which
@@ -140,6 +142,7 @@ func newGoBackNConn(ctx context.Context, sendFunc sendBytesFunc,
 		ctx:               ctxc,
 		cancel:            cancel,
 		quit:              make(chan struct{}),
+		awaitingResend:    false,
 	}
 }
 
@@ -525,6 +528,10 @@ func (g *GoBackNConn) receivePacketsForever() error { // nolint:gocyclo
 		case *PacketData:
 			switch m.Seq == g.recvSeq {
 			case true:
+				if g.awaitingResend && !m.IsResent {
+					continue
+				}
+				g.awaitingResend = false
 				// We received a data packet with the sequence
 				// number we were expecting. So we respond with
 				// an ACK message with that sequence number
@@ -575,6 +582,8 @@ func (g *GoBackNConn) receivePacketsForever() error { // nolint:gocyclo
 
 					continue
 				}
+
+				g.awaitingResend = true
 
 				log.Tracef("%d: Sending NACK %d", g.getID(), g.recvSeq)
 
